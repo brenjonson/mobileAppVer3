@@ -1,5 +1,6 @@
 package com.example.newhomepage
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
@@ -9,9 +10,12 @@ import android.widget.ArrayAdapter
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.example.newhomepage.api.models.EventResponse
 import com.example.newhomepage.api.models.RegistrationResponse
 import com.example.newhomepage.repositories.EventRepository
@@ -47,6 +51,7 @@ class ChartActivity : AppCompatActivity() {
     private lateinit var titleTextView: TextView
     private lateinit var descriptionTextView: TextView
     private lateinit var loadingProgressBar: ProgressBar
+    private lateinit var registeredEventsRecyclerView: RecyclerView
 
     private lateinit var eventRepository: EventRepository
     private lateinit var registrationRepository: RegistrationRepository
@@ -59,7 +64,8 @@ class ChartActivity : AppCompatActivity() {
         "กิจกรรมตามเดือน",
         "กิจกรรมยอดนิยม",
         "การมีส่วนร่วมของฉัน",
-        "แนวโน้มการจัดกิจกรรม"
+        "แนวโน้มการจัดกิจกรรม",
+        "กิจกรรมที่ฉันเข้าร่วม"  // เพิ่มตัวเลือกใหม่
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,6 +85,10 @@ class ChartActivity : AppCompatActivity() {
         titleTextView = findViewById(R.id.chartTitleTextView)
         descriptionTextView = findViewById(R.id.chartDescriptionTextView)
         loadingProgressBar = findViewById(R.id.loadingProgressBar)
+        registeredEventsRecyclerView = findViewById(R.id.registeredEventsRecyclerView)
+
+        // ตั้งค่า RecyclerView
+        registeredEventsRecyclerView.layoutManager = LinearLayoutManager(this)
 
         // ตั้งค่า spinner สำหรับเลือกประเภทกราฟ
         setupChartTypeSpinner()
@@ -131,19 +141,30 @@ class ChartActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val token = sessionManager.getToken() ?: return@launch
+                Log.d("ChartActivity", "Loading user registrations with token: $token")
+
                 val result = registrationRepository.getUserRegistrations(token)
 
                 result.onSuccess { registrations ->
+                    Log.d("ChartActivity", "Successfully loaded ${registrations.size} registrations")
+                    // แสดงรายละเอียดการลงทะเบียนทั้งหมดที่ได้รับ
+                    registrations.forEach { registration ->
+                        Log.d("ChartActivity", "Registration: eventId=${registration.event_id}, status=${registration.status}")
+                    }
+
                     userRegistrations = registrations
-                    // อัพเดทกราฟเฉพาะถ้ากำลังแสดงกราฟการมีส่วนร่วมของผู้ใช้
-                    if (chartSpinner.selectedItemPosition == 3) {
-                        updateChartDisplay(3)
+
+                    // อัพเดทกราฟทันทีหากกำลังแสดงกราฟที่เกี่ยวข้อง
+                    if (chartSpinner.selectedItemPosition == 3 || chartSpinner.selectedItemPosition == 5) {
+                        updateChartDisplay(chartSpinner.selectedItemPosition)
                     }
                 }.onFailure { exception ->
-                    Log.e("ChartActivity", "Error loading registrations: ${exception.message}")
+                    Log.e("ChartActivity", "Error loading registrations: ${exception.message}", exception)
+                    Toast.makeText(this@ChartActivity, "ไม่สามารถโหลดข้อมูลการลงทะเบียนได้", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Log.e("ChartActivity", "Exception: ${e.message}")
+                Log.e("ChartActivity", "Exception during loading registrations: ${e.message}", e)
+                Toast.makeText(this@ChartActivity, "เกิดข้อผิดพลาด: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -158,6 +179,7 @@ class ChartActivity : AppCompatActivity() {
         pieChart.visibility = View.GONE
         barChart.visibility = View.GONE
         lineChart.visibility = View.GONE
+        registeredEventsRecyclerView.visibility = View.GONE
 
         when (chartTypePosition) {
             0 -> showCategoryPieChart()  // กิจกรรมตามหมวดหมู่
@@ -165,6 +187,7 @@ class ChartActivity : AppCompatActivity() {
             2 -> showPopularEventsChart() // กิจกรรมยอดนิยม
             3 -> showUserParticipationChart() // การมีส่วนร่วมของผู้ใช้
             4 -> showEventTrendLineChart() // แนวโน้มการจัดกิจกรรม
+            5 -> showUserRegisteredEvents() // กิจกรรมที่ฉันเข้าร่วม
         }
     }
 
@@ -456,12 +479,88 @@ class ChartActivity : AppCompatActivity() {
         lineChart.animateXY(1000, 1000)
     }
 
+    // แสดงรายการกิจกรรมที่ผู้ใช้เข้าร่วม
+    private fun showUserRegisteredEvents() {
+        titleTextView.text = "กิจกรรมที่ฉันเข้าร่วม"
+        descriptionTextView.text = "รายการกิจกรรมทั้งหมดที่คุณได้ลงทะเบียนเข้าร่วม"
+
+        Log.d("ChartActivity", "Show user registered events called, logged in: ${sessionManager.isLoggedIn()}")
+
+        if (!sessionManager.isLoggedIn()) {
+            descriptionTextView.text = "กรุณาเข้าสู่ระบบเพื่อดูกิจกรรมที่คุณเข้าร่วม"
+            registeredEventsRecyclerView.visibility = View.GONE
+            return
+        }
+
+        Log.d("ChartActivity", "User registrations count: ${userRegistrations.size}")
+
+        if (userRegistrations.isEmpty()) {
+            descriptionTextView.text = "คุณยังไม่ได้เข้าร่วมกิจกรรมใดๆ"
+            registeredEventsRecyclerView.visibility = View.GONE
+            return
+        }
+
+
+
+        // จับคู่ข้อมูลลงทะเบียนกับกิจกรรม
+        val eventIds = userRegistrations.map { it.event_id }
+        Log.d("ChartActivity", "Event IDs from registrations: $eventIds")
+        Log.d("ChartActivity", "All events count: ${allEvents.size}")
+        val registeredEvents = allEvents.filter { eventIds.contains(it.id) }
+        Log.d("ChartActivity", "Matched registered events: ${registeredEvents.size}")
+
+        if (registeredEvents.isEmpty()) {
+            descriptionTextView.text = "ไม่พบข้อมูลกิจกรรมที่คุณเข้าร่วม"
+            registeredEventsRecyclerView.visibility = View.GONE
+            return
+        }
+
+        // สร้าง EventModel จากข้อมูล API
+        val eventModels = registeredEvents.map { event ->
+            // แปลงรูปแบบวันที่
+            val eventDate = try {
+                val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                val outputFormat = SimpleDateFormat("dd-MM-yyyy", Locale.getDefault())
+                val date = inputFormat.parse(event.event_date)
+                outputFormat.format(date ?: Date())
+            } catch (e: Exception) {
+                event.event_date
+            }
+
+            // สร้าง EventModel
+            EventModel(
+                id = event.id,
+                eventName = event.title,
+                eventDate = eventDate,
+                imageResId = getImageResourceForEvent(event.category),
+                category = event.category,
+                imageUrl = event.image_url
+            )
+        }
+
+        // ตั้งค่า Adapter
+        val adapter = EventAdapter(eventModels.toMutableList()) { event ->
+            // เมื่อคลิกที่กิจกรรม
+            val intent = Intent(this, EventDetailActivity::class.java)
+            intent.putExtra("eventName", event.eventName)
+            intent.putExtra("eventDate", event.eventDate)
+            intent.putExtra("eventImageResId", event.imageResId)
+            intent.putExtra("eventId", event.id)
+            intent.putExtra("eventImageUrl", event.imageUrl)
+            startActivity(intent)
+        }
+
+        registeredEventsRecyclerView.adapter = adapter
+        registeredEventsRecyclerView.visibility = View.VISIBLE
+    }
+
     private fun showEmptyDataMessage() {
         titleTextView.text = "ไม่พบข้อมูล"
         descriptionTextView.text = "ไม่สามารถแสดงกราฟได้เนื่องจากไม่มีข้อมูลกิจกรรม"
         pieChart.visibility = View.GONE
         barChart.visibility = View.GONE
         lineChart.visibility = View.GONE
+        registeredEventsRecyclerView.visibility = View.GONE
     }
 
     private fun showLoading(isLoading: Boolean) {
@@ -469,5 +568,17 @@ class ChartActivity : AppCompatActivity() {
         pieChart.visibility = View.GONE
         barChart.visibility = View.GONE
         lineChart.visibility = View.GONE
+        registeredEventsRecyclerView.visibility = View.GONE
+    }
+
+    // Helper function เพื่อเลือกรูปภาพตามหมวดหมู่
+    private fun getImageResourceForEvent(category: String): Int {
+        return when (category.lowercase()) {
+            "กีฬา" -> R.drawable.banner1
+            "การศึกษา" -> R.drawable.event2
+            "ศิลปะ" -> R.drawable.event3
+            "ดนตรี" -> R.drawable.event3
+            else -> R.drawable.event1
+        }
     }
 }
