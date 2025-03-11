@@ -79,12 +79,6 @@ class MainActivity : AppCompatActivity() {
         }
         categoryRecyclerView.adapter = categoryAdapter
 
-        // ตั้งค่าปุ่มเปลี่ยนธีม
-        val themeToggleButton: ImageButton = findViewById(R.id.themeToggleButton)
-        updateThemeIcon(themeToggleButton)
-        themeToggleButton.setOnClickListener {
-            toggleTheme(themeToggleButton)
-        }
 
         // ตั้งค่าช่องค้นหา
         val searchBar: EditText = findViewById(R.id.searchBar)
@@ -274,16 +268,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ในส่วนของการตั้งค่า Bottom Navigation ใน MainActivity.kt
     private fun setupBottomNavigation() {
         val bottomNavigationView: BottomNavigationView = findViewById(R.id.bottomNavigationView)
         bottomNavigationView.setOnItemSelectedListener { item ->
             when (item.itemId) {
-                R.id.subscriptions -> {
-                    val intent = Intent(this, AnnouncementActivity::class.java)
-                    intent.putExtra("eventList", ArrayList(eventList)) // ส่งข้อมูล eventList
+                R.id.shorts -> {  // ปุ่ม Chart ในเมนูด้านล่าง
+                    val intent = Intent(this, ChartActivity::class.java)
                     startActivity(intent)
                     true
                 }
+                R.id.subscriptions -> {
+                    val intent = Intent(this, AnnouncementActivity::class.java)
+                    intent.putExtra("eventList", ArrayList(eventList))
+                    startActivity(intent)
+                    true
+                }
+                // กรณีอื่นๆ
                 else -> false
             }
         }
